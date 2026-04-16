@@ -1,0 +1,359 @@
+openapi: 3.0.3
+info:
+  title: E-commerce Order API
+  version: 1.0.0
+  description: |
+    Express + TypeScript + MongoDB. JWT access + refresh tokens; roles `customer` | `admin`.
+servers:
+  - url: http://localhost:3000
+    description: Local
+tags:
+  - name: Health
+  - name: Auth
+  - name: Users
+  - name: Products
+  - name: Orders
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: ok }
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register (role customer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokensResponse"
+        "409":
+          description: Email already registered
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokensResponse"
+        "401":
+          description: Invalid credentials
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      accessToken: { type: string }
+        "401":
+          description: Invalid refresh token
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: OK
+  /api/users/me:
+    get:
+      tags: [Users]
+      summary: Current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+    patch:
+      tags: [Users]
+      summary: Update profile (optional password)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeRequest"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+  /api/products:
+    get:
+      tags: [Products]
+      summary: List active products
+      responses:
+        "200":
+          description: OK
+    post:
+      tags: [Products]
+      summary: Create product (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "201":
+          description: Created
+        "403":
+          description: Forbidden
+  /api/products/{id}:
+    get:
+      tags: [Products]
+      summary: Get product by id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not found
+    patch:
+      tags: [Products]
+      summary: Update product (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductRequest"
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: Forbidden
+    delete:
+      tags: [Products]
+      summary: Soft-delete product (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: Forbidden
+  /api/orders:
+    post:
+      tags: [Orders]
+      summary: Place order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Created
+    get:
+      tags: [Orders]
+      summary: List orders (customer sees own; admin sees all)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+  /api/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Get order
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: Forbidden
+  /api/orders/{id}/status:
+    patch:
+      tags: [Orders]
+      summary: Update order status (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderStatusRequest"
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: Forbidden
+  /api/orders/{id}/cancel:
+    patch:
+      tags: [Orders]
+      summary: Cancel pending order (owner or admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Only pending orders can be cancelled
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        name: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    AuthTokensResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            accessToken: { type: string }
+            refreshToken: { type: string }
+    UpdateMeRequest:
+      type: object
+      properties:
+        name: { type: string }
+        password: { type: string, minLength: 8 }
+    CreateProductRequest:
+      type: object
+      required: [name, price, stock]
+      properties:
+        name: { type: string }
+        price: { type: number, minimum: 0 }
+        stock: { type: integer, minimum: 0 }
+    UpdateProductRequest:
+      type: object
+      properties:
+        name: { type: string }
+        price: { type: number, minimum: 0 }
+        stock: { type: integer, minimum: 0 }
+        isActive: { type: boolean }
+    CreateOrderRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [productId, quantity]
+            properties:
+              productId: { type: string }
+              quantity: { type: integer, minimum: 1 }
+    UpdateOrderStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum:
+            - pending
+            - confirmed
+            - shipped
+            - delivered
+            - cancelled
