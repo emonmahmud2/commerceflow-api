@@ -5,7 +5,7 @@ info:
   description: |
     Express + TypeScript + MongoDB. JWT access + refresh tokens; roles `customer` | `admin`.
 servers:
-  - url: http://localhost:3000
+  - url: https://commerceflow-api-bo9r.vercel.app
     description: Local
 tags:
   - name: Health
