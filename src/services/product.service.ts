@@ -23,11 +23,15 @@ export async function updateProduct(
   id: string,
   input: Partial<{ name: string; price: number; stock: number; isActive: boolean }>
 ) {
-  const product = await Product.findByIdAndUpdate(id, input, {
-    new: true,
-    runValidators: true,
-  });
+  const product = await Product.findById(id);
   if (!product) throw new AppError(404, "Product not found");
+
+  if (input.name !== undefined) product.name = input.name;
+  if (input.price !== undefined) product.price = input.price;
+  if (input.stock !== undefined) product.stock = input.stock;
+  if (input.isActive !== undefined) product.isActive = input.isActive;
+
+  await product.save();
   return product;
 }
 
