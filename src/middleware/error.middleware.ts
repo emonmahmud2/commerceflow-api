@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import mongoose from "mongoose";
 import { AppError } from "../errors/AppError.js";
 
 export function errorMiddleware(
@@ -12,6 +13,24 @@ export function errorMiddleware(
       success: false,
       message: err.message,
       ...(err.details !== undefined ? { details: err.details } : {}),
+    });
+    return;
+  }
+
+  if (err instanceof mongoose.Error.CastError) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid id",
+      path: err.path,
+    });
+    return;
+  }
+
+  if (err instanceof mongoose.Error.ValidationError) {
+    res.status(422).json({
+      success: false,
+      message: "Validation failed",
+      details: err.errors,
     });
     return;
   }

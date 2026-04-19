@@ -5,61 +5,71 @@ import type { Role } from "../constants/roles.js";
 import { AppError } from "../errors/AppError.js";
 import { Order, Product } from "../models/index.js";
 
+/**
+ * Creates an order without multi-document transactions (works on standalone MongoDB).
+ * Stock is decremented atomically per line; if order insert fails, stock is rolled back.
+ */
 export async function createOrder(
   userId: string,
   items: { productId: string; quantity: number }[]
 ) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const lineItems: {
+    productId: mongoose.Types.ObjectId;
+    quantity: number;
+    unitPrice: number;
+  }[] = [];
+  let totalAmount = 0;
+  const stockRollback: { productId: mongoose.Types.ObjectId; quantity: number }[] = [];
 
   try {
-    const lineItems: {
-      productId: mongoose.Types.ObjectId;
-      quantity: number;
-      unitPrice: number;
-    }[] = [];
-    let totalAmount = 0;
-
     for (const line of items) {
-      const product = await Product.findById(line.productId).session(session);
-      if (!product || !product.isActive) {
-        throw new AppError(400, `Product not found: ${line.productId}`);
-      }
-      if (product.stock < line.quantity) {
-        throw new AppError(400, `Insufficient stock for ${product.name}`);
+      const product = await Product.findOneAndUpdate(
+        {
+          _id: line.productId,
+          isActive: true,
+          stock: { $gte: line.quantity },
+        },
+        { $inc: { stock: -line.quantity } },
+        { new: true }
+      );
+
+      if (!product) {
+        throw new AppError(
+          400,
+          `Product not found, inactive, or insufficient stock: ${line.productId}`
+        );
       }
 
       const unitPrice = product.price;
       totalAmount += unitPrice * line.quantity;
+      stockRollback.push({
+        productId: product._id as mongoose.Types.ObjectId,
+        quantity: line.quantity,
+      });
       lineItems.push({
-        productId: product._id,
+        productId: product._id as mongoose.Types.ObjectId,
         quantity: line.quantity,
         unitPrice,
       });
-
-      product.stock -= line.quantity;
-      await product.save({ session });
     }
 
-    const [order] = await Order.create(
-      [
-        {
-          userId: new mongoose.Types.ObjectId(userId),
-          items: lineItems,
-          status: ORDER_STATUS.PENDING,
-          totalAmount,
-        },
-      ],
-      { session }
-    );
+    const order = await Order.create({
+      userId: new mongoose.Types.ObjectId(userId),
+      items: lineItems,
+      status: ORDER_STATUS.PENDING,
+      totalAmount,
+    });
 
-    await session.commitTransaction();
     return order;
   } catch (err) {
-    await session.abortTransaction();
+    await Promise.all(
+      stockRollback.map((d) =>
+        Product.updateOne({ _id: d.productId }, { $inc: { stock: d.quantity } }).exec()
+      )
+    ).catch(() => {
+      /* best-effort rollback */
+    });
     throw err;
-  } finally {
-    session.endSession();
   }
 }
 
