@@ -1,6 +1,6 @@
 import cors from "cors";
 import express from "express";
-import helmet from "helmet";
+import * as helmet from "helmet";
 import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env.js";
 import { loadOpenApiSpec } from "./config/swagger.js";
@@ -11,7 +11,7 @@ import { apiRouter } from "./routes/index.js";
 export function createApp() {
   const app = express();
 
-  app.use(helmet());
+  app.use(helmet.default());
   app.use(
     cors({
       origin: env.corsOrigin === "*" ? true : env.corsOrigin,
