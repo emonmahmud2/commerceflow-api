@@ -2,15 +2,27 @@ import cors from "cors";
 import express, { type RequestHandler } from "express";
 import * as helmet from "helmet";
 import mongoose from "mongoose";
-import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env.js";
 import { loadOpenApiSpec } from "./config/swagger.js";
+import { swaggerUiCdnPageHtml, swaggerUiInitScript } from "./config/swaggerUiCdn.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
 import { notFound } from "./middleware/notFound.middleware.js";
 import { apiRouter } from "./routes/index.js";
 
-/** Helmet's package types mis-resolve under `NodeNext` on some installs (TS2349). */
-const helmetMiddleware = helmet.default as unknown as () => RequestHandler;
+type HelmetCsp = { getDefaultDirectives: () => Record<string, Iterable<string>> };
+
+/** Helmet's default export typing mis-resolves under `NodeNext` on some installs (TS2349). */
+const helmetInstall = helmet.default as unknown as (opts?: Record<string, unknown>) => RequestHandler;
+
+const helmetMiddleware = helmetInstall({
+  contentSecurityPolicy: {
+    directives: {
+      ...(helmet as unknown as { contentSecurityPolicy: HelmetCsp }).contentSecurityPolicy.getDefaultDirectives(),
+      scriptSrc: ["'self'", "https://cdn.jsdelivr.net"],
+      styleSrc: ["'self'", "https:", "'unsafe-inline'"],
+    },
+  },
+});
 
 let mongoConnect: Promise<typeof mongoose> | undefined;
 
@@ -27,14 +39,14 @@ export function createApp() {
 
   // Vercel runs this file without `index.ts`; connect before API routes.
   app.use((req, res, next) => {
-    if (req.path === "/health") {
+    if (req.path === "/health" || req.path.startsWith("/api-docs")) {
       next();
       return;
     }
     void ensureMongo().then(() => next()).catch(next);
   });
 
-  app.use(helmetMiddleware());
+  app.use(helmetMiddleware);
   app.use(
     cors({
       origin: env.corsOrigin === "*" ? true : env.corsOrigin,
@@ -48,11 +60,17 @@ export function createApp() {
   });
 
   const openApiSpec = loadOpenApiSpec();
-  app.use(
-    "/api-docs",
-    swaggerUi.serve,
-    swaggerUi.setup(openApiSpec, { customSiteTitle: "Order API Docs" })
-  );
+  const openApiSpecUrl = "/api-docs/openapi.json";
+
+  app.get(openApiSpecUrl, (_req, res) => {
+    res.json(openApiSpec);
+  });
+  app.get("/api-docs/ui-init.js", (_req, res) => {
+    res.type("application/javascript").send(swaggerUiInitScript(openApiSpecUrl));
+  });
+  app.get(["/api-docs", "/api-docs/"], (_req, res) => {
+    res.type("html").send(swaggerUiCdnPageHtml());
+  });
 
   app.use("/api", apiRouter);
   app.use(notFound);
