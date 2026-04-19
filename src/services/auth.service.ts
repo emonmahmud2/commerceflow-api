@@ -48,10 +48,12 @@ async function issueTokens(userId: string, role: Role) {
     Date.now() + parseExpiresToMs(env.refreshTokenExpiresIn)
   );
 
-  await RefreshToken.create({
+  RefreshToken.create({
     userId: new mongoose.Types.ObjectId(userId),
     token: refreshToken,
     expiresAt,
+  }).catch((err) => {
+    console.error("Failed to store refresh token:", err);
   });
 
   return { accessToken, refreshToken };
