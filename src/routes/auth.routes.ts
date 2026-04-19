@@ -12,12 +12,12 @@ import {
 export const authRoutes = Router();
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX) || 100,
   message: "Too many requests from this IP, please try again later",
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: false,
+  skipSuccessfulRequests: process.env.AUTH_RATE_LIMIT_SKIP_SUCCESS === "true" || false,
 });
 
 authRoutes.post(
