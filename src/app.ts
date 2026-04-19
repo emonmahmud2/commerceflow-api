@@ -14,13 +14,15 @@ type HelmetCsp = { getDefaultDirectives: () => Record<string, Iterable<string>> 
 /** Helmet's default export typing mis-resolves under `NodeNext` on some installs (TS2349). */
 const helmetInstall = helmet.default as unknown as (opts?: Record<string, unknown>) => RequestHandler;
 
+const cspDirectives: Record<string, Iterable<string>> = {
+  ...(helmet as unknown as { contentSecurityPolicy: HelmetCsp }).contentSecurityPolicy.getDefaultDirectives(),
+};
+// Defaults already use "script-src" / "style-src" keys; do not add camelCase keys (Helmet sees duplicates).
+cspDirectives["script-src"] = ["'self'", "https://cdn.jsdelivr.net"];
+
 const helmetMiddleware = helmetInstall({
   contentSecurityPolicy: {
-    directives: {
-      ...(helmet as unknown as { contentSecurityPolicy: HelmetCsp }).contentSecurityPolicy.getDefaultDirectives(),
-      scriptSrc: ["'self'", "https://cdn.jsdelivr.net"],
-      styleSrc: ["'self'", "https:", "'unsafe-inline'"],
-    },
+    directives: cspDirectives,
   },
 });
 
